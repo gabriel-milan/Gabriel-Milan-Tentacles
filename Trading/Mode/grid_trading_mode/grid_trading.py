@@ -71,7 +71,7 @@ class GridTradingMode(staggered_orders_trading.StaggeredOrdersTradingMode):
                     self._user_commands_callback,
                     {"bot_id": self.bot_id, "subject": self.get_name()}
                 )
-        except KeyError:
+        except (KeyError, AttributeError):  # todo remove AttributeError
             return [mode_consumer, order_consumer]
         return [mode_consumer, order_consumer, user_commands_consumer]
 

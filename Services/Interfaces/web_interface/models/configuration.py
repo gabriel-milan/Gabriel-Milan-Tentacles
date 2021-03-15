@@ -212,7 +212,11 @@ def get_tentacle_from_string(name, media_url, with_info=True):
 
 
 def get_tentacle_user_commands(klass):
-    return klass.get_user_commands()
+    # TODO remove try/except
+    try:
+        return klass.get_user_commands()
+    except AttributeError:
+        return {}
 
 
 def get_tentacle_config(klass):
