@@ -34,6 +34,13 @@ def user_feedback():
         catch_exception=True))
 
 
+@api.api.route("/user_suggest")
+def user_suggest():
+    return json.dumps(external_resources_manager.get_external_resource(
+        service_constants.EXTERNAL_RESOURCE_FEEDBACK_WEBSITE_URL,
+        catch_exception=True))
+
+
 @api.api.route("/announcements")
 def announcements():
     return json.dumps(external_resources_manager.get_external_resource(

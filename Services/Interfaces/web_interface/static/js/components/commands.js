@@ -16,8 +16,7 @@
  * License along with this library.
  */
 
-function load_commands_metadata() {
-    const feedbackButton = $("#feedbackButton");
+function load_commands_metadata(feedbackButton) {
     if(feedbackButton.length > 0){
         $.get({
             url: feedbackButton.attr(update_url_attr),
@@ -63,7 +62,10 @@ function metrics_failure_callback(updated_data, update_url, dom_root_element, ms
 }
 
 $(document).ready(function() {
-    load_commands_metadata();
+    const googleFeedbackButton = $("#feedbackButton");
+    const websiteFeedbackButton = $("#suggestButton");
+    load_commands_metadata(googleFeedbackButton);
+    load_commands_metadata(websiteFeedbackButton);
     $("#metricsCheckbox").change(function(){
         update_metrics_option();
     });
