@@ -1,7 +1,9 @@
-author: gabriel-milan
-name: ga-base
-short-name: ga-base
-repository: Gabriel-Milan-Tentacles
+author: DrakkarSoftware
+name: base
+short-name: base
+repository: OctoBot-Tentacles
 version: VERSION_PLACEHOLDER
 description: >
-  This package contains an evaluator for implementing genetic algorithms on OctoBot
+  This package contains default evaluators, strategies, utilitary modules, interfaces and trading modes.
+tags:
+  - officials
