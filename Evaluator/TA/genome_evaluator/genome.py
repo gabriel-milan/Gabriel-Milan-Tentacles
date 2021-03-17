@@ -10,13 +10,15 @@ import octobot_tentacles_manager.api as tentacles_manager_api
 
 class GenomeEvaluator(evaluators.TAEvaluator):
 
-    N_FEATURES: int = 7
+    N_FEATURES: int = 6
     GENOME_SIGNAL_LEN: int = 10
     GENOME_LEN: int = N_FEATURES * GENOME_SIGNAL_LEN
+    THRESHOLD: float = 0.5
 
     def __init__(self, tentacles_setup_config):
         super().__init__(tentacles_setup_config)
         genome: list = None
+        self._bought: bool = False
         self.genome: np.ndarray = None
         self.bb_period: int = 14
         self.rsi_period: int = 9
@@ -40,6 +42,21 @@ class GenomeEvaluator(evaluators.TAEvaluator):
             genome = [0 for _ in range(self.GENOME_LEN)]
         self.genome = np.array(genome)
 
+    def buy(self):
+        if not self._bought:
+            self._bought = True
+            return -1
+        return 0
+
+    def sell(self):
+        if self._bought:
+            self._bought = False
+            return 1
+        return 0
+
+    def do_nothing(self):
+        return 0
+
     async def ohlcv_callback(self, exchange: str, exchange_id: str,
                              cryptocurrency: str, symbol: str, time_frame, candle, inc_in_construction_data):
         candle_data = trading_api.get_symbol_close_candles(self.get_exchange_symbol_data(exchange, exchange_id, symbol),
@@ -51,9 +68,21 @@ class GenomeEvaluator(evaluators.TAEvaluator):
         if candle_data is not None and len(candle_data) > self.minimum_period:
             lbb, mbb, ubb = tulipy.bbands(
                 candle_data, period=self.bb_period, stddev=2)
-            rsi = tulipy.rsi(candle_data, period=self.rsi_period)
+            lbb_len = len(lbb)
+            mbb_len = len(mbb)
+            ubb_len = len(ubb)
+            lbb = (lbb - candle_data[-lbb_len:]) / candle_data[-lbb_len:]
+            mbb = (mbb - candle_data[-mbb_len:]) / candle_data[-mbb_len:]
+            ubb = (ubb - candle_data[-ubb_len:]) / candle_data[-ubb_len:]
+            rsi = tulipy.rsi(candle_data, period=self.rsi_period) / 100
             fast_ema = tulipy.ema(candle_data, period=self.fast_ema_period)
+            fe_len = len(fast_ema)
+            fast_ema = (
+                fast_ema - candle_data[-fe_len:]) / candle_data[-fe_len:]
             slow_ema = tulipy.ema(candle_data, period=self.slow_ema_period)
+            se_len = len(slow_ema)
+            slow_ema = (
+                slow_ema - candle_data[-se_len:]) / candle_data[-se_len:]
 
             min_len = min([
                 len(lbb),
@@ -62,7 +91,6 @@ class GenomeEvaluator(evaluators.TAEvaluator):
                 len(rsi),
                 len(fast_ema),
                 len(slow_ema),
-                len(candle_data),
             ])
 
             if (min_len > self.GENOME_SIGNAL_LEN):
@@ -74,7 +102,6 @@ class GenomeEvaluator(evaluators.TAEvaluator):
                     np.isnan(rsi[-self.GENOME_SIGNAL_LEN:]).any(),
                     np.isnan(fast_ema[-self.GENOME_SIGNAL_LEN:]).any(),
                     np.isnan(slow_ema[-self.GENOME_SIGNAL_LEN:]).any(),
-                    np.isnan(candle_data[-self.GENOME_SIGNAL_LEN:]).any(),
                 ])
 
                 if not is_nan:
@@ -85,17 +112,23 @@ class GenomeEvaluator(evaluators.TAEvaluator):
                         rsi[-self.GENOME_SIGNAL_LEN:],
                         fast_ema[-self.GENOME_SIGNAL_LEN:],
                         slow_ema[-self.GENOME_SIGNAL_LEN:],
-                        candle_data[-self.GENOME_SIGNAL_LEN:]
                     ])
 
                     try:
                         assert features.shape[0] == self.GENOME_LEN
                     except AssertionError:
-                        self.logger.error(
+                        raise Exception(
                             f"Features and genome length differs: (Genome: {self.GENOME_LEN}), (Features: {features.shape[0]})")
-                        return
 
-                    self.eval_note = np.sum(self.genome * features)
+                    result = np.sum(self.genome * features)
+
+                    if (result > self.THRESHOLD):
+                        self.eval_note = self.buy()
+                    elif (result < -self.THRESHOLD):
+                        self.eval_note = self.sell()
+                    else:
+                        self.eval_note = self.do_nothing()
+
                     await self.evaluation_completed(cryptocurrency, symbol, time_frame,
                                                     eval_time=evaluators_util.get_eval_time(full_candle=candle,
                                                                                             time_frame=time_frame))
