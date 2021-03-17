@@ -5,7 +5,7 @@ This is a fork from the original [OctoBot-Tentacles](https://github.com/Drakkar-
 For installation of these tentacles, please use the following URL for downloading:
 
 ```
-https://gabriel-milan.github.io/files/ga-base/0.1.0/any_platform.zip
+https://gabriel-milan.github.io/files/ga-base/stable/any_platform.zip
 ```
 
 The original repository README is below:
