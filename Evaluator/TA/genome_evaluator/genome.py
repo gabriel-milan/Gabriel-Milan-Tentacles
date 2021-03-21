@@ -27,8 +27,6 @@ class GenomeEvaluator(evaluators.TAEvaluator):
         self.minimum_period: int = max([
             self.bb_period,
             self.rsi_period,
-            self.fast_ema_period,
-            self.slow_ema_period,
         ])
         self.evaluator_config = tentacles_manager_api.get_tentacle_config(
             self.tentacles_setup_config, self.__class__)
@@ -65,7 +63,12 @@ class GenomeEvaluator(evaluators.TAEvaluator):
         await self.evaluate(cryptocurrency, symbol, time_frame, candle_data, candle)
 
     async def evaluate(self, cryptocurrency, symbol, time_frame, candle_data, candle):
-        if candle_data is not None and len(candle_data) > self.minimum_period:
+        if len(candle_data >= 50):
+            self.logger.debug(f"candle data is {candle_data[-50:]}")
+        else:
+            self.logger.debug(f"candle data is {candle_data}")
+        if candle_data is not None and len(candle_data) >= self.minimum_period:
+            self.logger.debug(f"candle data len is {len(candle_data)}")
             lbb, mbb, ubb = tulipy.bbands(
                 candle_data, period=self.bb_period, stddev=2)
             lbb_len = len(lbb)
@@ -93,25 +96,39 @@ class GenomeEvaluator(evaluators.TAEvaluator):
                 len(slow_ema),
             ])
 
-            if (min_len > self.GENOME_SIGNAL_LEN):
+            if (min_len >= self.GENOME_SIGNAL_LEN):
+
+                lbb = lbb[-self.GENOME_SIGNAL_LEN:]
+                mbb = mbb[-self.GENOME_SIGNAL_LEN:]
+                ubb = ubb[-self.GENOME_SIGNAL_LEN:]
+                rsi = rsi[-self.GENOME_SIGNAL_LEN:]
+                fast_ema = fast_ema[-self.GENOME_SIGNAL_LEN:]
+                slow_ema = slow_ema[-self.GENOME_SIGNAL_LEN:]
+
+                self.logger.debug(f"lbb is {lbb}")
+                self.logger.debug(f"mbb is {mbb}")
+                self.logger.debug(f"ubb is {ubb}")
+                self.logger.debug(f"rsi is {rsi}")
+                self.logger.debug(f"fast_ema is {fast_ema}")
+                self.logger.debug(f"slow_ema is {slow_ema}")
 
                 is_nan = any([
-                    np.isnan(lbb[-self.GENOME_SIGNAL_LEN:]).any(),
-                    np.isnan(mbb[-self.GENOME_SIGNAL_LEN:]).any(),
-                    np.isnan(ubb[-self.GENOME_SIGNAL_LEN:]).any(),
-                    np.isnan(rsi[-self.GENOME_SIGNAL_LEN:]).any(),
-                    np.isnan(fast_ema[-self.GENOME_SIGNAL_LEN:]).any(),
-                    np.isnan(slow_ema[-self.GENOME_SIGNAL_LEN:]).any(),
+                    np.isnan(lbb).any(),
+                    np.isnan(mbb).any(),
+                    np.isnan(ubb).any(),
+                    np.isnan(rsi).any(),
+                    np.isnan(fast_ema).any(),
+                    np.isnan(slow_ema).any(),
                 ])
 
                 if not is_nan:
                     features: np.ndarray = np.concatenate([
-                        lbb[-self.GENOME_SIGNAL_LEN:],
-                        mbb[-self.GENOME_SIGNAL_LEN:],
-                        ubb[-self.GENOME_SIGNAL_LEN:],
-                        rsi[-self.GENOME_SIGNAL_LEN:],
-                        fast_ema[-self.GENOME_SIGNAL_LEN:],
-                        slow_ema[-self.GENOME_SIGNAL_LEN:],
+                        lbb,
+                        mbb,
+                        ubb,
+                        rsi,
+                        fast_ema,
+                        slow_ema,
                     ])
 
                     try:
@@ -121,19 +138,32 @@ class GenomeEvaluator(evaluators.TAEvaluator):
                             f"Features and genome length differs: (Genome: {self.GENOME_LEN}), (Features: {features.shape[0]})")
 
                     result = np.sum(self.genome * features)
+                    self.logger.debug(f"sum is {result}")
 
-                    if (result > self.THRESHOLD):
+                    if (result >= self.THRESHOLD):
+                        self.logger.debug(
+                            "sum is greater than +threshold, let's buy!")
                         self.eval_note = self.buy()
-                    elif (result < -self.THRESHOLD):
+                    elif (result <= -self.THRESHOLD):
+                        self.logger.debug(
+                            "sum is lower than -threshold, let's sell!")
                         self.eval_note = self.sell()
                     else:
+                        self.logger.debug(
+                            "sum is within (-threshold, +threshold), I'll do nothing")
                         self.eval_note = self.do_nothing()
 
                     await self.evaluation_completed(cryptocurrency, symbol, time_frame,
                                                     eval_time=evaluators_util.get_eval_time(full_candle=candle,
                                                                                             time_frame=time_frame))
                     return
-
+                else:
+                    self.logger.debug("is_nan is True, this is bad!")
+            else:
+                self.logger.debug(f"min_len not enough! len = {min_len}")
+        else:
+            self.logger.debug(
+                f"candle data is not enough! len = {len(candle_data)}")
         self.eval_note = commons_constants.START_PENDING_EVAL_NOTE
         await self.evaluation_completed(cryptocurrency, symbol, time_frame,
                                         eval_time=evaluators_util.get_eval_time(full_candle=candle,
