@@ -17,9 +17,9 @@ class GenomeEvaluator(evaluators.TAEvaluator):
 
     def __init__(self, tentacles_setup_config):
         super().__init__(tentacles_setup_config)
-        genome: list = None
+        genomes: list = None
         self._bought: bool = False
-        self.genome: np.ndarray = None
+        self.genomes: np.ndarray = None
         self.bb_period: int = 14
         self.rsi_period: int = 9
         self.fast_ema_period: int = 10
@@ -31,29 +31,15 @@ class GenomeEvaluator(evaluators.TAEvaluator):
         self.evaluator_config = tentacles_manager_api.get_tentacle_config(
             self.tentacles_setup_config, self.__class__)
         try:
-            genome = ast.literal_eval(self.evaluator_config["genome"])
+            genomes = ast.literal_eval(self.evaluator_config["genomes"])
         except Exception as e:
-            self.logger.error(f"Error when parsing genome: {e}")
-            genome = [0 for _ in range(self.GENOME_LEN)]
-        if len(genome) != self.GENOME_LEN:
-            self.logger.error(f"Genome must be of size {self.GENOME_LEN}!")
-            genome = [0 for _ in range(self.GENOME_LEN)]
-        self.genome = np.array(genome)
-
-    def buy(self):
-        if not self._bought:
-            self._bought = True
-            return -1
-        return 0
-
-    def sell(self):
-        if self._bought:
-            self._bought = False
-            return 1
-        return 0
-
-    def do_nothing(self):
-        return 0
+            self.logger.error(f"Error when parsing genomes: {e}")
+            genomes = [[0 for _ in range(self.GENOME_LEN)]]
+        for g in genomes:
+            if len(g) != self.GENOME_LEN:
+                self.logger.error(f"Genome must be of size {self.GENOME_LEN}!")
+                genomes = [[0 for _ in range(self.GENOME_LEN)]]
+        self.genomes = np.array(genomes)
 
     async def ohlcv_callback(self, exchange: str, exchange_id: str,
                              cryptocurrency: str, symbol: str, time_frame, candle, inc_in_construction_data):
@@ -137,21 +123,13 @@ class GenomeEvaluator(evaluators.TAEvaluator):
                         raise Exception(
                             f"Features and genome length differs: (Genome: {self.GENOME_LEN}), (Features: {features.shape[0]})")
 
-                    result = np.sum(self.genome * features)
+                    result = 0
+                    for i in range(self.genomes.shape[0]):
+                        result += np.sum(self.genomes[i] * features)
+                    result /= self.genomes.shape[0]
                     self.logger.debug(f"sum is {result}")
 
-                    if (result >= self.THRESHOLD):
-                        self.logger.debug(
-                            "sum is greater than +threshold, let's buy!")
-                        self.eval_note = self.buy()
-                    elif (result <= -self.THRESHOLD):
-                        self.logger.debug(
-                            "sum is lower than -threshold, let's sell!")
-                        self.eval_note = self.sell()
-                    else:
-                        self.logger.debug(
-                            "sum is within (-threshold, +threshold), I'll do nothing")
-                        self.eval_note = self.do_nothing()
+                    self.eval_note = result
 
                     await self.evaluation_completed(cryptocurrency, symbol, time_frame,
                                                     eval_time=evaluators_util.get_eval_time(full_candle=candle,
